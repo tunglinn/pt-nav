@@ -34,9 +34,10 @@ def _add(g: Graph, a: str, b: str, w: float) -> None:
     g.setdefault(b, []).append((a, w))
 
 
-def build_graph() -> tuple[Graph, Positions]:
+def build_graph() -> tuple[Graph, Positions, dict[str, str]]:
     graph: Graph = {}
     pos:   Positions = {}
+    node_colors: dict[str, str] = {}   # mrt node_id -> line color hex
 
     # ── MRT nodes ─────────────────────────────────────────────────────────────
     mrt = db.get_all_stations()
@@ -49,6 +50,10 @@ def build_graph() -> tuple[Graph, Positions]:
     line_rows = db.get_lines_with_stations()   # already sorted by line_id, sequence
     for _, grp in itertools.groupby(line_rows, key=lambda r: r['line_id']):
         stops = list(grp)
+        for stop in stops:
+            nid = f"mrt:{stop['station_id']}"
+            if nid not in node_colors:
+                node_colors[nid] = stop['color_hex'] or '#888888'
         for i in range(len(stops) - 1):
             a = f"mrt:{stops[i]['station_id']}"
             b = f"mrt:{stops[i + 1]['station_id']}"
@@ -90,4 +95,4 @@ def build_graph() -> tuple[Graph, Positions]:
     n_nodes = len(pos)
     n_edges = sum(len(v) for v in graph.values())
     print(f"  graph built: {n_nodes} nodes, {n_edges} directed edges")
-    return graph, pos
+    return graph, pos, node_colors

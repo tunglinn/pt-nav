@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 import database as db
 
 router = APIRouter()
@@ -17,3 +17,89 @@ def health():
 @router.get("/stations")
 def stations():
     return db.get_stations_for_map()
+
+
+@router.get("/graph/edges")
+def graph_edges(request: Request):
+    graph      = request.app.state.graph
+    pos        = request.app.state.positions
+    colors     = request.app.state.node_colors
+
+    seen  = set()
+    edges = []
+    for a, neighbours in graph.items():
+        for b, w in neighbours:
+            key = frozenset((a, b))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            a_lat, a_lng = pos[a]
+            b_lat, b_lng = pos[b]
+            a_mrt = a.startswith("mrt:")
+            b_mrt = b.startswith("mrt:")
+
+            if a_mrt and b_mrt:
+                etype = "mrt"
+                color = colors.get(a, "#888888")
+            elif not a_mrt and not b_mrt:
+                etype = "bike"
+                color = "#22cc66"
+            else:
+                etype = "walk"
+                color = "#ff8800"
+
+            edges.append({
+                "a_id": a, "a_lat": a_lat, "a_lng": a_lng,
+                "b_id": b, "b_lat": b_lat, "b_lng": b_lng,
+                "type": etype,
+                "color": color,
+                "weight_secs": round(w, 1),
+            })
+
+    return edges
+
+
+@router.get("/graph/stats")
+def graph_stats(request: Request):
+    graph = request.app.state.graph
+
+    mrt_nodes  = [n for n in graph if n.startswith("mrt:")]
+    bike_nodes = [n for n in graph if n.startswith("bike:")]
+
+    seen = set()
+    mrt_edges = bike_edges = walk_edges = 0
+    for a, neighbours in graph.items():
+        for b, _ in neighbours:
+            key = frozenset((a, b))
+            if key in seen:
+                continue
+            seen.add(key)
+            a_mrt, b_mrt = a.startswith("mrt:"), b.startswith("mrt:")
+            if a_mrt and b_mrt:
+                mrt_edges += 1
+            elif not a_mrt and not b_mrt:
+                bike_edges += 1
+            else:
+                walk_edges += 1
+
+    mrt_deg  = [len(graph[n]) for n in mrt_nodes]
+    bike_deg = [len(graph[n]) for n in bike_nodes]
+
+    return {
+        "nodes": {
+            "total": len(graph),
+            "mrt":   len(mrt_nodes),
+            "bike":  len(bike_nodes),
+        },
+        "edges": {
+            "total": mrt_edges + bike_edges + walk_edges,
+            "mrt":   mrt_edges,
+            "bike":  bike_edges,
+            "walk":  walk_edges,
+        },
+        "avg_degree": {
+            "mrt":  round(sum(mrt_deg)  / len(mrt_deg)  if mrt_deg  else 0, 1),
+            "bike": round(sum(bike_deg) / len(bike_deg) if bike_deg else 0, 1),
+        },
+    }

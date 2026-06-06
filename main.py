@@ -26,7 +26,7 @@ def _load_env() -> None:
 async def lifespan(app: FastAPI):
     _load_env()
     db.init_db()
-    app.state.graph, app.state.positions = graph_module.build_graph()
+    app.state.graph, app.state.positions, app.state.node_colors = graph_module.build_graph()
     yield
 
 
