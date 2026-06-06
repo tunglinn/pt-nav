@@ -25,20 +25,7 @@
     }
     #banner.err { color: #ee6666; }
 
-    #network-link {
-      position: absolute;
-      bottom: 28px; left: 50%; transform: translateX(-50%);
-      z-index: 1000;
-      background: rgba(26, 26, 46, 0.88);
-      color: #7878ff;
-      padding: 6px 16px;
-      border-radius: 20px;
-      text-decoration: none;
-      font-size: 0.78rem;
-      border: 1px solid #2a2a4a;
-      white-space: nowrap;
-    }
-    #network-link:hover { background: rgba(40, 40, 80, 0.95); }
+    /* ── Mobile layout ── */
 
     /* ── Route panel ── */
     #route-panel {
@@ -50,6 +37,30 @@
       border-radius: 10px;
       padding: 12px;
       width: 264px;
+    }
+
+    /* ── Mobile layout ── */
+    @media (max-width: 600px) {
+      #route-panel {
+        top: auto; left: 0; right: 0;
+        bottom: 0;
+        width: 100%;
+        border-radius: 14px 14px 0 0;
+        border-left: none; border-right: none; border-bottom: none;
+        padding: 14px 16px;
+        padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      }
+
+      .rp-dropdown {
+        bottom: 100%; top: auto;
+        border-radius: 6px 6px 0 0;
+        border-top: 1px solid #2a2a4a;
+        border-bottom: none;
+        max-height: 40vh;
+      }
+
+      #banner { display: none; }
+
     }
 
     .rp-field { position: relative; margin-bottom: 8px; }
@@ -141,12 +152,27 @@
       border: 1px solid #2a2a4a; border-radius: 4px; cursor: pointer;
     }
     .pa-btn:hover { background: #2a2a4a; color: #aaaaff; }
+
+    #panel-footer {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #2a2a4a;
+      text-align: center;
+    }
+    #panel-footer a {
+      font-size: 0.72rem;
+      color: #4444aa;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #panel-footer a:hover { color: #7878ff; }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="banner">Loading stations&hellip;</div>
-  <a href="/graph.html" id="network-link">The Network &rarr;</a>
 
   <div id="route-panel">
     <div class="rp-field">
@@ -167,6 +193,19 @@
       <div class="rs-breakdown" id="rs-breakdown"></div>
       <button class="rs-clear" id="clear-btn">Clear route</button>
     </div>
+    <div id="panel-footer">
+      <a href="/graph.html">
+        <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="2.5" r="2" fill="currentColor"/>
+          <circle cx="2.5" cy="14" r="2" fill="currentColor"/>
+          <circle cx="15.5" cy="14" r="2" fill="currentColor"/>
+          <line x1="9" y1="2.5" x2="2.5" y2="14" stroke="currentColor" stroke-width="1.4"/>
+          <line x1="9" y1="2.5" x2="15.5" y2="14" stroke="currentColor" stroke-width="1.4"/>
+          <line x1="2.5" y1="14" x2="15.5" y2="14" stroke="currentColor" stroke-width="1.4"/>
+        </svg>
+        The Network
+      </a>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -184,9 +223,10 @@
     const mrtLineLayer = L.layerGroup().addTo(map);
     const mrtLayer     = L.layerGroup().addTo(map);
     const bikeLayer    = L.layerGroup().addTo(map);
+    const isMobile = window.innerWidth < 600;
     L.control.layers(null, {
       'MRT Lines': mrtLineLayer, 'MRT Stations': mrtLayer, 'YouBike Stations': bikeLayer,
-    }, { collapsed: false, position: 'topright' }).addTo(map);
+    }, { collapsed: isMobile, position: 'topright' }).addTo(map);
 
     fetch(`${API}/mrt/lines`)
       .then(r => r.json())
