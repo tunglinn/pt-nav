@@ -64,6 +64,19 @@ def build_graph() -> tuple[Graph, Positions, dict[str, str]]:
             )
             _add(graph, a, b, d / _MRT_SPEED)
 
+    # ── MRT interchange edges (same-location nodes on different lines) ────────
+    # Groups nodes by (lat, lng); any two nodes at the same spot get a
+    # 2-minute transfer penalty edge so A* can change lines there.
+    _TRANSFER_SECS = 120.0
+    coord_to_nodes: dict[tuple, list[str]] = {}
+    for nid, (lat, lng) in pos.items():
+        if nid.startswith("mrt:"):
+            coord_to_nodes.setdefault((lat, lng), []).append(nid)
+    for nodes in coord_to_nodes.values():
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                _add(graph, nodes[i], nodes[j], _TRANSFER_SECS)
+
     # ── YouBike nodes ─────────────────────────────────────────────────────────
     bike = db.get_all_youbike_stations()
     for s in bike:

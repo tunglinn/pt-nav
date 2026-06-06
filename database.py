@@ -103,6 +103,35 @@ def get_lines_with_stations() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def search_stations(q: str, limit: int = 5) -> list[dict]:
+    pattern = f"%{q}%"
+    with _conn() as con:
+        mrt = con.execute("""
+            SELECT 'mrt:' || MIN(station_id) AS id, name_zh, name_en, 'mrt' AS type
+            FROM mrt_stations
+            WHERE name_zh LIKE ? OR name_en LIKE ?
+            GROUP BY name_zh
+            LIMIT ?
+        """, (pattern, pattern, limit)).fetchall()
+        bike = con.execute("""
+            SELECT 'bike:' || station_id AS id, name_zh, name_en, 'bike' AS type
+            FROM youbike_stations
+            WHERE name_zh LIKE ? OR name_en LIKE ?
+            LIMIT ?
+        """, (pattern, pattern, limit)).fetchall()
+
+    results = []
+    for r in mrt:
+        name = r['name_zh'] + (f" {r['name_en']}" if r['name_en'] else "")
+        results.append({"id": r['id'], "name": name, "type": "mrt"})
+    for r in bike:
+        name = r['name_zh'].replace('YouBike2.0_', '')
+        if 'YouBike_' in name:
+            name = name.replace('YouBike_', '') + ' (1.0)'
+        results.append({"id": r['id'], "name": name, "type": "bike"})
+    return results
+
+
 def get_all_youbike_stations() -> list[dict]:
     with _conn() as con:
         rows = con.execute(

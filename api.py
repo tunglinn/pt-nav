@@ -21,6 +21,13 @@ def stations():
     return db.get_stations_for_map()
 
 
+@router.get("/search")
+def search(q: str = ""):
+    if len(q) < 2:
+        return []
+    return db.search_stations(q)
+
+
 @router.get("/graph/edges")
 def graph_edges(request: Request):
     graph      = request.app.state.graph
@@ -96,11 +103,14 @@ def route(req: RouteRequest, request: Request):
             seg_type = "walk"
         segments.append({"from": a, "to": b, "type": seg_type, "seconds": round(weight, 1)})
 
+    waypoints = [{"id": nid, "lat": pos[nid][0], "lng": pos[nid][1]} for nid in path]
+
     return {
         "path":          path,
         "total_seconds": round(total_secs, 1),
         "total_minutes": round(total_secs / 60, 1),
         "segments":      segments,
+        "waypoints":     waypoints,
     }
 
 
