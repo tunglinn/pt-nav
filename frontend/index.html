@@ -133,6 +133,14 @@
       cursor: pointer; text-decoration: underline;
     }
     .rs-clear:hover { color: #7878ff; }
+
+    .popup-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .pa-btn {
+      flex: 1; padding: 4px 0; font-size: 0.72rem;
+      background: #1a1a2e; color: #8888cc;
+      border: 1px solid #2a2a4a; border-radius: 4px; cursor: pointer;
+    }
+    .pa-btn:hover { background: #2a2a4a; color: #aaaaff; }
   </style>
 </head>
 <body>
@@ -173,11 +181,21 @@
       maxZoom: 19,
     }).addTo(map);
 
-    const mrtLayer  = L.layerGroup().addTo(map);
-    const bikeLayer = L.layerGroup().addTo(map);
+    const mrtLineLayer = L.layerGroup().addTo(map);
+    const mrtLayer     = L.layerGroup().addTo(map);
+    const bikeLayer    = L.layerGroup().addTo(map);
     L.control.layers(null, {
-      'MRT Stations': mrtLayer, 'YouBike Stations': bikeLayer,
+      'MRT Lines': mrtLineLayer, 'MRT Stations': mrtLayer, 'YouBike Stations': bikeLayer,
     }, { collapsed: false, position: 'topright' }).addTo(map);
+
+    fetch(`${API}/mrt/lines`)
+      .then(r => r.json())
+      .then(lines => {
+        lines.forEach(line => {
+          const coords = line.stations.map(s => [s.lat, s.lng]);
+          L.polyline(coords, { color: line.color, weight: 4, opacity: 0.75 }).addTo(mrtLineLayer);
+        });
+      });
 
     const banner = document.getElementById('banner');
 
@@ -187,27 +205,45 @@
       return c.startsWith('#') ? c : '#' + c;
     }
 
+    // Registry maps node ID -> { id, name, type } for popup click handlers
+    const _reg = {};
+
+    function _popupActions(nodeId) {
+      return `<div class="popup-actions">
+        <button class="pa-btn" onclick="setStationFromMap('from','${nodeId}')">Set Start</button>
+        <button class="pa-btn" onclick="setStationFromMap('to','${nodeId}')">Set End</button>
+      </div>`;
+    }
+
     function renderMRT(stations) {
       stations.forEach(s => {
+        const nodeId = `mrt:${s.station_id}`;
+        const name   = s.name_zh + (s.name_en ? ` ${s.name_en}` : '');
+        _reg[nodeId] = { id: nodeId, name, type: 'mrt' };
         L.circleMarker([s.lat, s.lng], {
           radius: 7, color: '#ffffff', weight: 1.5,
           fillColor: firstColor(s.line_colors), fillOpacity: 0.92,
         })
         .bindPopup(`<b>${s.name_zh}</b>${s.name_en ? '<br>' + s.name_en : ''}` +
-          (s.line_ids ? `<br><small style="color:#888">${s.line_ids.replace(/,/g, ' &middot; ')}</small>` : ''))
+          (s.line_ids ? `<br><small style="color:#888">${s.line_ids.replace(/,/g, ' · ')}</small>` : '') +
+          _popupActions(nodeId))
         .addTo(mrtLayer);
       });
     }
 
     function renderYouBike(stations) {
       stations.forEach(s => {
+        const nodeId = `bike:${s.station_id}`;
+        const name   = s.name_zh.replace('YouBike2.0_', '').replace('YouBike_', '');
+        _reg[nodeId] = { id: nodeId, name, type: 'bike' };
         L.circleMarker([s.lat, s.lng], {
           radius: 4, color: '#ffffff', weight: 1,
           fillColor: '#22cc66', fillOpacity: 0.85,
         })
-        .bindPopup(`<b>${s.name_zh}</b>` +
+        .bindPopup(`<b>${name}</b>` +
           (s.name_en ? `<br><small>${s.name_en}</small>` : '') +
-          `<br><small style="color:#888">${s.city}</small>`)
+          `<br><small style="color:#888">${s.city}</small>` +
+          _popupActions(nodeId))
         .addTo(bikeLayer);
       });
     }
@@ -217,7 +253,7 @@
       .then(data => {
         renderMRT(data.mrt);
         renderYouBike(data.youbike);
-        banner.textContent = `${data.mrt.length} MRT stations &middot; ${data.youbike.length} YouBike stations`;
+        banner.textContent = `${data.mrt.length} MRT stations · ${data.youbike.length} YouBike stations`;
       })
       .catch(() => {
         banner.className = 'err';
@@ -226,13 +262,44 @@
 
     // ── Route panel ───────────────────────────────────────────────────────────
 
-    const SEG_COLORS  = { mrt: '#3388ff', bike: '#22cc66', walk: '#ff8800' };
-    const SEG_WEIGHTS = { mrt: 5,         bike: 3,         walk: 2 };
-    const MODE_LABELS = { mrt: 'MRT',     bike: 'YouBike', walk: 'Walk' };
+    const SEG_WEIGHTS = { mrt: 5, bike: 3, walk: 2 };
+    const MODE_LABELS = { mrt: 'MRT', bike: 'YouBike', walk: 'Walk' };
+    const MODE_ICONS  = { mrt: '🚇', bike: '🚲', walk: '🚶' };
+
+    function makePin(color, letter) {
+      return L.divIcon({
+        className: '',
+        html: `<svg width="22" height="30" viewBox="0 0 22 30" xmlns="http://www.w3.org/2000/svg">
+          <path d="M11 0 C5 0 0 5 0 11 C0 19 11 30 11 30 C11 30 22 19 22 11 C22 5 17 0 11 0 Z"
+                fill="${color}" stroke="white" stroke-width="1.5"/>
+          <text x="11" y="14" text-anchor="middle" dominant-baseline="middle"
+                fill="white" font-family="system-ui,sans-serif" font-size="9" font-weight="700">${letter}</text>
+        </svg>`,
+        iconSize:   [22, 30],
+        iconAnchor: [11, 30],
+      });
+    }
 
     let fromStation = null;
     let toStation   = null;
     let routeLayers = [];
+
+    function setStation(role, station) {
+      if (role === 'from') {
+        fromStation = station;
+        document.getElementById('from-input').value = station.name;
+      } else {
+        toStation = station;
+        document.getElementById('to-input').value = station.name;
+      }
+      updateRouteBtn();
+    }
+
+    // Called from popup button onclick attributes
+    function setStationFromMap(role, nodeId) {
+      setStation(role, _reg[nodeId]);
+      map.closePopup();
+    }
 
     function debounce(fn, ms) {
       let t;
@@ -277,12 +344,12 @@
     setupAutocomplete(
       document.getElementById('from-input'),
       document.getElementById('from-dropdown'),
-      s => { fromStation = s; updateRouteBtn(); }
+      s => setStation('from', s)
     );
     setupAutocomplete(
       document.getElementById('to-input'),
       document.getElementById('to-dropdown'),
-      s => { toStation = s; updateRouteBtn(); }
+      s => setStation('to', s)
     );
 
     function clearRoute() {
@@ -331,20 +398,16 @@
       data.segments.forEach(seg => {
         routeLayers.push(
           L.polyline([wpMap[seg.from], wpMap[seg.to]], {
-            color: SEG_COLORS[seg.type], weight: SEG_WEIGHTS[seg.type], opacity: 0.85,
+            color: seg.color, weight: SEG_WEIGHTS[seg.type], opacity: 0.85,
           }).addTo(map)
         );
       });
 
       [
-        { w: data.waypoints[0],                          color: '#3388ff' },
-        { w: data.waypoints[data.waypoints.length - 1],  color: '#ff4444' },
-      ].forEach(({ w, color }) =>
-        routeLayers.push(
-          L.circleMarker([w.lat, w.lng], {
-            radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
-          }).addTo(map)
-        )
+        { w: data.waypoints[0],                         icon: makePin('#22aa55', 'Start') },
+        { w: data.waypoints[data.waypoints.length - 1], icon: makePin('#dd2222', 'End') },
+      ].forEach(({ w, icon }) =>
+        routeLayers.push(L.marker([w.lat, w.lng], { icon }).addTo(map))
       );
 
       map.fitBounds(
@@ -358,7 +421,7 @@
       data.segments.forEach(s => { modeTimes[s.type] += s.seconds; });
       const parts = Object.entries(modeTimes)
         .filter(([, s]) => s > 0)
-        .map(([type, secs]) => `${MODE_LABELS[type]} ${Math.round(secs / 60)} min`);
+        .map(([type, secs]) => `${MODE_ICONS[type]} ${MODE_LABELS[type]} ${Math.round(secs / 60)} min`);
       document.getElementById('rs-total').textContent      = `~${data.total_minutes} min total`;
       document.getElementById('rs-breakdown').textContent  = parts.join(' · ');
       document.getElementById('route-result').style.display = 'block';

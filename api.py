@@ -28,6 +28,18 @@ def search(q: str = ""):
     return db.search_stations(q)
 
 
+@router.get("/mrt/lines")
+def mrt_lines():
+    rows = db.get_lines_with_stations()
+    lines: dict[str, dict] = {}
+    for r in rows:
+        lid = r["line_id"]
+        if lid not in lines:
+            lines[lid] = {"line_id": lid, "color": r["color_hex"] or "#888888", "stations": []}
+        lines[lid]["stations"].append({"lat": r["lat"], "lng": r["lng"]})
+    return list(lines.values())
+
+
 @router.get("/graph/edges")
 def graph_edges(request: Request):
     graph      = request.app.state.graph
@@ -76,8 +88,9 @@ class RouteRequest(BaseModel):
 
 @router.post("/route")
 def route(req: RouteRequest, request: Request):
-    graph = request.app.state.graph
-    pos   = request.app.state.positions
+    graph       = request.app.state.graph
+    pos         = request.app.state.positions
+    node_colors = request.app.state.node_colors
 
     if req.from_id not in graph:
         raise HTTPException(status_code=404, detail=f"Node not found: {req.from_id}")
@@ -97,11 +110,14 @@ def route(req: RouteRequest, request: Request):
         a_mrt, b_mrt = a.startswith("mrt:"), b.startswith("mrt:")
         if a_mrt and b_mrt:
             seg_type = "mrt"
+            color    = node_colors.get(a, "#888888")
         elif not a_mrt and not b_mrt:
             seg_type = "bike"
+            color    = "#FFD000"
         else:
             seg_type = "walk"
-        segments.append({"from": a, "to": b, "type": seg_type, "seconds": round(weight, 1)})
+            color    = "#ff8800"
+        segments.append({"from": a, "to": b, "type": seg_type, "seconds": round(weight, 1), "color": color})
 
     waypoints = [{"id": nid, "lat": pos[nid][0], "lng": pos[nid][1]} for nid in path]
 
