@@ -103,6 +103,14 @@ def get_lines_with_stations() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_all_youbike_stations() -> list[dict]:
+    with _conn() as con:
+        rows = con.execute(
+            "SELECT station_id, lat, lng FROM youbike_stations"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def get_stations_for_map() -> dict:
     with _conn() as con:
         mrt = con.execute("""

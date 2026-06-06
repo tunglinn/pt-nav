@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 import api
 import database as db
+import graph as graph_module
 
 
 def _load_env() -> None:
@@ -25,6 +26,7 @@ def _load_env() -> None:
 async def lifespan(app: FastAPI):
     _load_env()
     db.init_db()
+    app.state.graph, app.state.positions = graph_module.build_graph()
     yield
 
 
