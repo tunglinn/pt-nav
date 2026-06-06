@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Network — pt-nav</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      display: flex;
+      height: 100vh;
+      font-family: system-ui, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+
+    /* ── Panel ── */
+    #panel {
+      width: 300px;
+      min-width: 300px;
+      height: 100vh;
+      overflow-y: auto;
+      background: #0f0f1a;
+      border-right: 1px solid #2a2a4a;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #panel-header {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+
+    .back-link {
+      font-size: 0.72rem;
+      color: #5555aa;
+      text-decoration: none;
+      display: inline-block;
+      margin-bottom: 10px;
+      letter-spacing: 0.02em;
+    }
+    .back-link:hover { color: #7878ff; }
+
+    h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; }
+
+    .explainer {
+      font-size: 0.78rem;
+      color: #7777aa;
+      line-height: 1.6;
+    }
+    .explainer strong { color: #aaaacc; }
+
+    .section {
+      padding: 14px 18px;
+      border-bottom: 1px solid #2a2a4a;
+    }
+
+    .section-title {
+      font-size: 0.67rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #4444aa;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 0.6rem;
+      background: #1a1a3a;
+      color: #6666bb;
+      padding: 2px 7px;
+      border-radius: 10px;
+      border: 1px solid #2a2a5a;
+      letter-spacing: 0.05em;
+    }
+
+    /* Stats */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+
+    .stat-card {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 9px 11px;
+    }
+    .stat-label { font-size: 0.67rem; color: #4444aa; margin-bottom: 3px; }
+    .stat-value { font-size: 1rem; font-weight: 600; color: #ccccee; }
+    .stat-sub   { font-size: 0.67rem; color: #4444aa; margin-top: 2px; }
+
+    /* Layers */
+    .layer-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 9px;
+      cursor: pointer;
+    }
+    .layer-row:last-child { margin-bottom: 0; }
+
+    .layer-row input[type="checkbox"] { cursor: pointer; accent-color: #7878ff; }
+
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .layer-row label {
+      flex: 1;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .layer-count {
+      font-size: 0.7rem;
+      color: #4444aa;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Parameters */
+    .param-group {
+      margin-bottom: 13px;
+    }
+    .param-group:last-of-type { margin-bottom: 10px; }
+
+    .param-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      margin-bottom: 5px;
+      color: #8888bb;
+    }
+    .param-val { color: #5555aa; }
+
+    input[type="range"] { width: 100%; accent-color: #3333aa; }
+
+    .coming-soon-note {
+      font-size: 0.7rem;
+      color: #3333aa;
+      margin-bottom: 10px;
+      font-style: italic;
+    }
+
+    .rebuild-btn {
+      width: 100%;
+      padding: 8px;
+      background: #1a1a2e;
+      color: #3333aa;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: not-allowed;
+    }
+
+    /* Map */
+    #map { flex: 1; }
+
+    /* Loading overlay */
+    #loading {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+      background: rgba(15, 15, 26, 0.88);
+      color: #7878ff;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      border: 1px solid #2a2a4a;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="panel">
+    <div id="panel-header">
+      <a href="/" class="back-link">← Back to map</a>
+      <h1>The Network</h1>
+      <p class="explainer">
+        Transit routing is built on a <strong>weighted graph</strong> — each station
+        is a node, each connection is an edge. Edge weights are travel times in
+        seconds, letting the router find the fastest path across MRT lines and
+        YouBike stations.
+      </p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Graph Stats</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Nodes</div>
+          <div class="stat-value" id="s-total-nodes">—</div>
+          <div class="stat-sub" id="s-node-split">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Edges</div>
+          <div class="stat-value" id="s-total-edges">—</div>
+          <div class="stat-sub" id="s-edge-split">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg MRT degree</div>
+          <div class="stat-value" id="s-mrt-deg">—</div>
+          <div class="stat-sub">connections/station</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg bike degree</div>
+          <div class="stat-value" id="s-bike-deg">—</div>
+          <div class="stat-sub">connections/station</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Layers</div>
+      <label class="layer-row">
+        <input type="checkbox" id="l-mrt" checked>
+        <span class="dot" style="background:#0070bd"></span>
+        <span>MRT segments</span>
+        <span class="layer-count" id="lc-mrt"></span>
+      </label>
+      <label class="layer-row">
+        <input type="checkbox" id="l-bike" checked>
+        <span class="dot" style="background:#22cc66"></span>
+        <span>Bike segments</span>
+        <span class="layer-count" id="lc-bike"></span>
+      </label>
+      <label class="layer-row">
+        <input type="checkbox" id="l-walk" checked>
+        <span class="dot" style="background:#ff8800"></span>
+        <span>Walk transfers</span>
+        <span class="layer-count" id="lc-walk"></span>
+      </label>
+    </div>
+
+    <div class="section">
+      <div class="section-title">
+        Graph Parameters
+        <span class="badge">Coming Soon</span>
+      </div>
+      <p class="coming-soon-note">Tweak and rebuild the graph live — in progress.</p>
+
+      <div class="param-group">
+        <div class="param-header">
+          <span>Bike search radius</span>
+          <span class="param-val">2,000 m</span>
+        </div>
+        <input type="range" min="500" max="5000" value="2000" disabled>
+      </div>
+
+      <div class="param-group">
+        <div class="param-header">
+          <span>Max bike neighbours</span>
+          <span class="param-val">5</span>
+        </div>
+        <input type="range" min="1" max="10" value="5" disabled>
+      </div>
+
+      <div class="param-group">
+        <div class="param-header">
+          <span>Walk transfer radius</span>
+          <span class="param-val">500 m</span>
+        </div>
+        <input type="range" min="100" max="1500" value="500" disabled>
+      </div>
+
+      <button class="rebuild-btn" disabled>Rebuild Graph</button>
+    </div>
+  </div>
+
+  <div id="map">
+    <div id="loading">Loading graph&hellip;</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const API = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      ? ''
+      : 'https://pt-nav.tunglin.workers.dev';
+
+    const renderer = L.canvas({ padding: 0.5 });
+
+    const map = L.map('map', { preferCanvas: true }).setView([25.05, 121.55], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const layers = {
+      mrt:  L.layerGroup().addTo(map),
+      bike: L.layerGroup().addTo(map),
+      walk: L.layerGroup().addTo(map),
+    };
+
+    ['mrt', 'bike', 'walk'].forEach(t => {
+      document.getElementById(`l-${t}`).addEventListener('change', e => {
+        e.target.checked ? map.addLayer(layers[t]) : map.removeLayer(layers[t]);
+      });
+    });
+
+    // Stats
+    fetch(`${API}/graph/stats`)
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('s-total-nodes').textContent = d.nodes.total.toLocaleString();
+        document.getElementById('s-node-split').textContent  = `${d.nodes.mrt} MRT · ${d.nodes.bike.toLocaleString()} bike`;
+        document.getElementById('s-total-edges').textContent = d.edges.total.toLocaleString();
+        document.getElementById('s-edge-split').textContent  = `${d.edges.mrt} MRT · ${d.edges.bike.toLocaleString()} bike`;
+        document.getElementById('s-mrt-deg').textContent     = d.avg_degree.mrt;
+        document.getElementById('s-bike-deg').textContent    = d.avg_degree.bike;
+        document.getElementById('lc-mrt').textContent        = d.edges.mrt;
+        document.getElementById('lc-bike').textContent       = d.edges.bike.toLocaleString();
+        document.getElementById('lc-walk').textContent       = d.edges.walk;
+      });
+
+    // Edges + nodes
+    const nodeMap = {};  // node_id -> { lat, lng, degree }
+
+    fetch(`${API}/graph/edges`)
+      .then(r => r.json())
+      .then(edges => {
+        document.getElementById('loading').style.display = 'none';
+
+        edges.forEach(e => {
+          // Accumulate degree per node
+          if (!nodeMap[e.a_id]) nodeMap[e.a_id] = { lat: e.a_lat, lng: e.a_lng, degree: 0 };
+          if (!nodeMap[e.b_id]) nodeMap[e.b_id] = { lat: e.b_lat, lng: e.b_lng, degree: 0 };
+          nodeMap[e.a_id].degree++;
+          nodeMap[e.b_id].degree++;
+
+          L.polyline([[e.a_lat, e.a_lng], [e.b_lat, e.b_lng]], {
+            renderer,
+            color:   e.color,
+            weight:  e.type === 'mrt' ? 3 : e.type === 'bike' ? 1.5 : 1,
+            opacity: e.type === 'mrt' ? 0.9 : e.type === 'bike' ? 0.55 : 0.35,
+          }).addTo(layers[e.type]);
+        });
+
+        // Draw station dots on top of edges
+        Object.entries(nodeMap).forEach(([id, n]) => {
+          const isMrt = id.startsWith('mrt:');
+          L.circleMarker([n.lat, n.lng], {
+            renderer,
+            radius:      isMrt ? 5 : 3,
+            color:       '#111111',
+            weight:      1,
+            fillColor:   isMrt ? '#ffffff' : '#22cc66',
+            fillOpacity: 0.9,
+          })
+          .bindPopup(
+            `<b>${id}</b><br>`
+            + `Type: ${isMrt ? 'MRT' : 'YouBike'}<br>`
+            + `Connections: ${n.degree}`
+          )
+          .addTo(layers[isMrt ? 'mrt' : 'bike']);
+        });
+      })
+      .catch(() => {
+        document.getElementById('loading').textContent = 'Could not load graph — is the API running?';
+      });
+  </script>
+</body>
+</html>

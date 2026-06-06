@@ -24,11 +24,26 @@
       pointer-events: none;
     }
     #banner.err { color: #ee6666; }
+    #network-link {
+      position: absolute;
+      bottom: 28px; left: 50%; transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(26, 26, 46, 0.88);
+      color: #7878ff;
+      padding: 6px 16px;
+      border-radius: 20px;
+      text-decoration: none;
+      font-size: 0.78rem;
+      border: 1px solid #2a2a4a;
+      white-space: nowrap;
+    }
+    #network-link:hover { background: rgba(40, 40, 80, 0.95); }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="banner">Loading stations&hellip;</div>
+  <a href="/graph.html" id="network-link">The Network &rarr;</a>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -86,7 +101,9 @@
       });
     }
 
-    const API = 'https://pt-nav.tunglin.workers.dev';
+    const API = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      ? ''
+      : 'https://pt-nav.tunglin.workers.dev';
 
     fetch(`${API}/stations`)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
