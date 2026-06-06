@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 import database as db
+import graph as graph_module
 
 router = APIRouter()
 
@@ -58,6 +60,48 @@ def graph_edges(request: Request):
             })
 
     return edges
+
+
+class RouteRequest(BaseModel):
+    from_id: str
+    to_id: str
+
+
+@router.post("/route")
+def route(req: RouteRequest, request: Request):
+    graph = request.app.state.graph
+    pos   = request.app.state.positions
+
+    if req.from_id not in graph:
+        raise HTTPException(status_code=404, detail=f"Node not found: {req.from_id}")
+    if req.to_id not in graph:
+        raise HTTPException(status_code=404, detail=f"Node not found: {req.to_id}")
+
+    result = graph_module.astar(graph, pos, req.from_id, req.to_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No path found between these nodes")
+
+    path, total_secs = result
+
+    segments = []
+    for i in range(len(path) - 1):
+        a, b = path[i], path[i + 1]
+        weight = next(w for nb, w in graph[a] if nb == b)
+        a_mrt, b_mrt = a.startswith("mrt:"), b.startswith("mrt:")
+        if a_mrt and b_mrt:
+            seg_type = "mrt"
+        elif not a_mrt and not b_mrt:
+            seg_type = "bike"
+        else:
+            seg_type = "walk"
+        segments.append({"from": a, "to": b, "type": seg_type, "seconds": round(weight, 1)})
+
+    return {
+        "path":          path,
+        "total_seconds": round(total_secs, 1),
+        "total_minutes": round(total_secs / 60, 1),
+        "segments":      segments,
+    }
 
 
 @router.get("/graph/stats")

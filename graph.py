@@ -2,6 +2,7 @@
 In-memory weighted graph over MRT + YouBike stations.
 All edge weights are travel time in seconds.
 """
+import heapq
 import itertools
 import math
 
@@ -96,3 +97,57 @@ def build_graph() -> tuple[Graph, Positions, dict[str, str]]:
     n_edges = sum(len(v) for v in graph.values())
     print(f"  graph built: {n_nodes} nodes, {n_edges} directed edges")
     return graph, pos, node_colors
+
+
+def astar(
+    graph: Graph,
+    positions: Positions,
+    start: str,
+    goal: str,
+) -> tuple[list[str], float] | None:
+    """
+    A* shortest path. Returns (path, total_seconds) or None if unreachable.
+    Heuristic: straight-line distance to goal at MRT speed (admissible).
+    """
+    if start not in graph or goal not in graph:
+        return None
+    if start == goal:
+        return [start], 0.0
+
+    def h(node: str) -> float:
+        lat1, lng1 = positions[node]
+        lat2, lng2 = positions[goal]
+        return haversine(lat1, lng1, lat2, lng2) / _MRT_SPEED
+
+    g_score: dict[str, float] = {start: 0.0}
+    came_from: dict[str, str] = {}
+    counter = itertools.count()          # tie-breaker so we never compare strings
+    open_set = [(h(start), next(counter), start)]
+    closed: set[str] = set()
+
+    while open_set:
+        _, _, current = heapq.heappop(open_set)
+
+        if current in closed:
+            continue
+        if current == goal:
+            path, node = [], goal
+            while node in came_from:
+                path.append(node)
+                node = came_from[node]
+            path.append(start)
+            path.reverse()
+            return path, g_score[goal]
+
+        closed.add(current)
+
+        for neighbour, weight in graph[current]:
+            if neighbour in closed:
+                continue
+            tentative_g = g_score[current] + weight
+            if tentative_g < g_score.get(neighbour, float('inf')):
+                came_from[neighbour] = current
+                g_score[neighbour] = tentative_g
+                heapq.heappush(open_set, (tentative_g + h(neighbour), next(counter), neighbour))
+
+    return None
