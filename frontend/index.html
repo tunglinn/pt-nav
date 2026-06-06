@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pt-nav</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; }
+    #map { width: 100vw; height: 100vh; }
+
+    #banner {
+      position: absolute;
+      top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(26, 26, 46, 0.92);
+      color: #b0b0cc;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      border: 1px solid #2a2a4a;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #banner.err { color: #ee6666; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="banner">Loading stations&hellip;</div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map', { zoomControl: true }).setView([25.05, 121.55], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const mrtLayer   = L.layerGroup().addTo(map);
+    const bikeLayer  = L.layerGroup().addTo(map);
+
+    L.control.layers(null, {
+      'MRT Stations':    mrtLayer,
+      'YouBike Stations': bikeLayer,
+    }, { collapsed: false, position: 'topright' }).addTo(map);
+
+    const banner = document.getElementById('banner');
+
+    function firstColor(colorsCsv) {
+      if (!colorsCsv) return '#888888';
+      const c = colorsCsv.split(',')[0].trim();
+      return c.startsWith('#') ? c : '#' + c;
+    }
+
+    function renderMRT(stations) {
+      stations.forEach(s => {
+        const fill = firstColor(s.line_colors);
+        L.circleMarker([s.lat, s.lng], {
+          radius: 7,
+          color: '#ffffff', weight: 1.5,
+          fillColor: fill, fillOpacity: 0.92,
+        })
+        .bindPopup(
+          `<b>${s.name_zh}</b>${s.name_en ? '<br>' + s.name_en : ''}`
+          + (s.line_ids ? `<br><small style="color:#888">${s.line_ids.replace(/,/g, ' · ')}</small>` : '')
+        )
+        .addTo(mrtLayer);
+      });
+    }
+
+    function renderYouBike(stations) {
+      stations.forEach(s => {
+        L.circleMarker([s.lat, s.lng], {
+          radius: 4,
+          color: '#ffffff', weight: 1,
+          fillColor: '#22cc66', fillOpacity: 0.85,
+        })
+        .bindPopup(
+          `<b>${s.name_zh}</b>${s.name_en ? '<br><small>' + s.name_en + '</small>' : ''}`
+          + `<br><small style="color:#888">${s.city}</small>`
+        )
+        .addTo(bikeLayer);
+      });
+    }
+
+    fetch('/stations')
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(data => {
+        renderMRT(data.mrt);
+        renderYouBike(data.youbike);
+        banner.textContent =
+          `${data.mrt.length} MRT stations · ${data.youbike.length} YouBike stations`;
+      })
+      .catch(() => {
+        banner.className = 'err';
+        banner.textContent = 'API unreachable — start the backend to load stations';
+      });
+  </script>
+</body>
+</html>
