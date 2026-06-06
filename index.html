@@ -24,6 +24,7 @@
       pointer-events: none;
     }
     #banner.err { color: #ee6666; }
+
     #network-link {
       position: absolute;
       bottom: 28px; left: 50%; transform: translateX(-50%);
@@ -38,6 +39,100 @@
       white-space: nowrap;
     }
     #network-link:hover { background: rgba(40, 40, 80, 0.95); }
+
+    /* ── Route panel ── */
+    #route-panel {
+      position: absolute;
+      top: 12px; left: 12px;
+      z-index: 1000;
+      background: rgba(15, 15, 26, 0.95);
+      border: 1px solid #2a2a4a;
+      border-radius: 10px;
+      padding: 12px;
+      width: 264px;
+    }
+
+    .rp-field { position: relative; margin-bottom: 8px; }
+
+    .rp-label {
+      display: block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #4444aa;
+      margin-bottom: 4px;
+    }
+
+    .rp-input {
+      width: 100%;
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 0.82rem;
+      padding: 7px 10px;
+      outline: none;
+    }
+    .rp-input:focus { border-color: #4444aa; }
+    .rp-input::placeholder { color: #333366; }
+
+    .rp-dropdown {
+      display: none;
+      position: absolute;
+      left: 0; right: 0; top: 100%;
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 1002;
+    }
+
+    .rp-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      font-size: 0.8rem;
+      color: #ccccee;
+      cursor: pointer;
+    }
+    .rp-item:hover { background: #2a2a4a; }
+
+    .rp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    .rp-btn {
+      width: 100%;
+      padding: 8px;
+      background: #2a2a6a;
+      color: #aaaaff;
+      border: 1px solid #3a3a8a;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      margin-top: 2px;
+    }
+    .rp-btn:disabled {
+      background: #1a1a2e; color: #333366;
+      border-color: #2a2a4a; cursor: not-allowed;
+    }
+    .rp-btn:not(:disabled):hover { background: #3a3a8a; }
+
+    #route-result {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #2a2a4a;
+    }
+    .rs-total    { font-size: 1rem; font-weight: 600; color: #ccccee; margin-bottom: 4px; }
+    .rs-breakdown { font-size: 0.75rem; color: #6666aa; margin-bottom: 8px; }
+    .rs-clear {
+      font-size: 0.72rem; color: #444488;
+      background: none; border: none;
+      cursor: pointer; text-decoration: underline;
+    }
+    .rs-clear:hover { color: #7878ff; }
   </style>
 </head>
 <body>
@@ -45,43 +140,61 @@
   <div id="banner">Loading stations&hellip;</div>
   <a href="/graph.html" id="network-link">The Network &rarr;</a>
 
+  <div id="route-panel">
+    <div class="rp-field">
+      <span class="rp-label">From</span>
+      <input id="from-input" class="rp-input" type="text"
+             placeholder="MRT or YouBike station&hellip;" autocomplete="off">
+      <div id="from-dropdown" class="rp-dropdown"></div>
+    </div>
+    <div class="rp-field">
+      <span class="rp-label">To</span>
+      <input id="to-input" class="rp-input" type="text"
+             placeholder="MRT or YouBike station&hellip;" autocomplete="off">
+      <div id="to-dropdown" class="rp-dropdown"></div>
+    </div>
+    <button id="route-btn" class="rp-btn" disabled>Find Route</button>
+    <div id="route-result" style="display:none">
+      <div class="rs-total" id="rs-total"></div>
+      <div class="rs-breakdown" id="rs-breakdown"></div>
+      <button class="rs-clear" id="clear-btn">Clear route</button>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map', { zoomControl: true }).setView([25.05, 121.55], 13);
+    const API = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      ? ''
+      : 'https://pt-nav.tunglin.workers.dev';
 
+    const map = L.map('map', { zoomControl: true }).setView([25.05, 121.55], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
 
-    const mrtLayer   = L.layerGroup().addTo(map);
-    const bikeLayer  = L.layerGroup().addTo(map);
-
+    const mrtLayer  = L.layerGroup().addTo(map);
+    const bikeLayer = L.layerGroup().addTo(map);
     L.control.layers(null, {
-      'MRT Stations':    mrtLayer,
-      'YouBike Stations': bikeLayer,
+      'MRT Stations': mrtLayer, 'YouBike Stations': bikeLayer,
     }, { collapsed: false, position: 'topright' }).addTo(map);
 
     const banner = document.getElementById('banner');
 
-    function firstColor(colorsCsv) {
-      if (!colorsCsv) return '#888888';
-      const c = colorsCsv.split(',')[0].trim();
+    function firstColor(csv) {
+      if (!csv) return '#888888';
+      const c = csv.split(',')[0].trim();
       return c.startsWith('#') ? c : '#' + c;
     }
 
     function renderMRT(stations) {
       stations.forEach(s => {
-        const fill = firstColor(s.line_colors);
         L.circleMarker([s.lat, s.lng], {
-          radius: 7,
-          color: '#ffffff', weight: 1.5,
-          fillColor: fill, fillOpacity: 0.92,
+          radius: 7, color: '#ffffff', weight: 1.5,
+          fillColor: firstColor(s.line_colors), fillOpacity: 0.92,
         })
-        .bindPopup(
-          `<b>${s.name_zh}</b>${s.name_en ? '<br>' + s.name_en : ''}`
-          + (s.line_ids ? `<br><small style="color:#888">${s.line_ids.replace(/,/g, ' · ')}</small>` : '')
-        )
+        .bindPopup(`<b>${s.name_zh}</b>${s.name_en ? '<br>' + s.name_en : ''}` +
+          (s.line_ids ? `<br><small style="color:#888">${s.line_ids.replace(/,/g, ' &middot; ')}</small>` : ''))
         .addTo(mrtLayer);
       });
     }
@@ -89,34 +202,167 @@
     function renderYouBike(stations) {
       stations.forEach(s => {
         L.circleMarker([s.lat, s.lng], {
-          radius: 4,
-          color: '#ffffff', weight: 1,
+          radius: 4, color: '#ffffff', weight: 1,
           fillColor: '#22cc66', fillOpacity: 0.85,
         })
-        .bindPopup(
-          `<b>${s.name_zh}</b>${s.name_en ? '<br><small>' + s.name_en + '</small>' : ''}`
-          + `<br><small style="color:#888">${s.city}</small>`
-        )
+        .bindPopup(`<b>${s.name_zh}</b>` +
+          (s.name_en ? `<br><small>${s.name_en}</small>` : '') +
+          `<br><small style="color:#888">${s.city}</small>`)
         .addTo(bikeLayer);
       });
     }
-
-    const API = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-      ? ''
-      : 'https://pt-nav.tunglin.workers.dev';
 
     fetch(`${API}/stations`)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then(data => {
         renderMRT(data.mrt);
         renderYouBike(data.youbike);
-        banner.textContent =
-          `${data.mrt.length} MRT stations · ${data.youbike.length} YouBike stations`;
+        banner.textContent = `${data.mrt.length} MRT stations &middot; ${data.youbike.length} YouBike stations`;
       })
       .catch(() => {
         banner.className = 'err';
         banner.textContent = 'API unreachable — start the backend to load stations';
       });
+
+    // ── Route panel ───────────────────────────────────────────────────────────
+
+    const SEG_COLORS  = { mrt: '#3388ff', bike: '#22cc66', walk: '#ff8800' };
+    const SEG_WEIGHTS = { mrt: 5,         bike: 3,         walk: 2 };
+    const MODE_LABELS = { mrt: 'MRT',     bike: 'YouBike', walk: 'Walk' };
+
+    let fromStation = null;
+    let toStation   = null;
+    let routeLayers = [];
+
+    function debounce(fn, ms) {
+      let t;
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    function showDropdown(dropdown, items, onPick) {
+      if (!items.length) { hideDropdown(dropdown); return; }
+      dropdown.innerHTML = items.map((s, i) =>
+        `<div class="rp-item" data-i="${i}">
+          <span class="rp-dot" style="background:${s.type === 'mrt' ? '#7878ff' : '#22cc66'}"></span>
+          ${s.name}
+        </div>`
+      ).join('');
+      dropdown.style.display = 'block';
+      dropdown.querySelectorAll('.rp-item').forEach((el, i) =>
+        el.addEventListener('mousedown', () => onPick(items[i]))
+      );
+    }
+
+    function hideDropdown(el) { el.style.display = 'none'; el.innerHTML = ''; }
+
+    function setupAutocomplete(inputEl, dropdownEl, onPick) {
+      const doSearch = debounce(async q => {
+        if (q.length < 2) { hideDropdown(dropdownEl); return; }
+        const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
+        showDropdown(dropdownEl, await r.json(), station => {
+          inputEl.value = station.name;
+          hideDropdown(dropdownEl);
+          onPick(station);
+        });
+      }, 300);
+
+      inputEl.addEventListener('input', () => doSearch(inputEl.value));
+      inputEl.addEventListener('blur',  () => setTimeout(() => hideDropdown(dropdownEl), 150));
+    }
+
+    function updateRouteBtn() {
+      document.getElementById('route-btn').disabled = !(fromStation && toStation);
+    }
+
+    setupAutocomplete(
+      document.getElementById('from-input'),
+      document.getElementById('from-dropdown'),
+      s => { fromStation = s; updateRouteBtn(); }
+    );
+    setupAutocomplete(
+      document.getElementById('to-input'),
+      document.getElementById('to-dropdown'),
+      s => { toStation = s; updateRouteBtn(); }
+    );
+
+    function clearRoute() {
+      routeLayers.forEach(l => map.removeLayer(l));
+      routeLayers = [];
+      document.getElementById('route-result').style.display = 'none';
+    }
+
+    document.getElementById('clear-btn').addEventListener('click', () => {
+      clearRoute();
+      ['from-input', 'to-input'].forEach(id => document.getElementById(id).value = '');
+      fromStation = toStation = null;
+      updateRouteBtn();
+    });
+
+    document.getElementById('route-btn').addEventListener('click', async () => {
+      clearRoute();
+      const btn = document.getElementById('route-btn');
+      btn.textContent = 'Routing…';
+      btn.disabled = true;
+
+      try {
+        const r = await fetch(`${API}/route`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from_id: fromStation.id, to_id: toStation.id }),
+        });
+        if (!r.ok) throw new Error('No route');
+        const data = await r.json();
+        drawRoute(data);
+        showSummary(data);
+      } catch {
+        document.getElementById('rs-total').textContent     = 'No route found';
+        document.getElementById('rs-breakdown').textContent = '';
+        document.getElementById('route-result').style.display = 'block';
+      } finally {
+        btn.textContent = 'Find Route';
+        btn.disabled = !(fromStation && toStation);
+      }
+    });
+
+    function drawRoute(data) {
+      const wpMap = {};
+      data.waypoints.forEach(w => { wpMap[w.id] = [w.lat, w.lng]; });
+
+      data.segments.forEach(seg => {
+        routeLayers.push(
+          L.polyline([wpMap[seg.from], wpMap[seg.to]], {
+            color: SEG_COLORS[seg.type], weight: SEG_WEIGHTS[seg.type], opacity: 0.85,
+          }).addTo(map)
+        );
+      });
+
+      [
+        { w: data.waypoints[0],                          color: '#3388ff' },
+        { w: data.waypoints[data.waypoints.length - 1],  color: '#ff4444' },
+      ].forEach(({ w, color }) =>
+        routeLayers.push(
+          L.circleMarker([w.lat, w.lng], {
+            radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1,
+          }).addTo(map)
+        )
+      );
+
+      map.fitBounds(
+        L.latLngBounds(data.waypoints.map(w => [w.lat, w.lng])),
+        { padding: [60, 60] }
+      );
+    }
+
+    function showSummary(data) {
+      const modeTimes = { mrt: 0, bike: 0, walk: 0 };
+      data.segments.forEach(s => { modeTimes[s.type] += s.seconds; });
+      const parts = Object.entries(modeTimes)
+        .filter(([, s]) => s > 0)
+        .map(([type, secs]) => `${MODE_LABELS[type]} ${Math.round(secs / 60)} min`);
+      document.getElementById('rs-total').textContent      = `~${data.total_minutes} min total`;
+      document.getElementById('rs-breakdown').textContent  = parts.join(' · ');
+      document.getElementById('route-result').style.display = 'block';
+    }
   </script>
 </body>
 </html>
