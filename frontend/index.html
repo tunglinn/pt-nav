@@ -86,9 +86,7 @@
       });
     }
 
-    const API = window.location.hostname.endsWith('github.io')
-      ? 'https://pt-nav.tl.workers.dev'
-      : '';
+    const API = 'https://pt-nav.tunglin.workers.dev';
 
     fetch(`${API}/stations`)
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
