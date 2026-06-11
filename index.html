@@ -220,9 +220,13 @@
       maxZoom: 19,
     }).addTo(map);
 
+    map.createPane('bikePane').style.zIndex    = 390;
+    map.createPane('mrtLinePane').style.zIndex = 395;
+    map.createPane('mrtStationPane').style.zIndex = 400;
+
+    const bikeLayer    = L.layerGroup().addTo(map);
     const mrtLineLayer = L.layerGroup().addTo(map);
     const mrtLayer     = L.layerGroup().addTo(map);
-    const bikeLayer    = L.layerGroup().addTo(map);
     const isMobile = window.innerWidth < 600;
     L.control.layers(null, {
       'MRT Lines': mrtLineLayer, 'MRT Stations': mrtLayer, 'YouBike Stations': bikeLayer,
@@ -233,7 +237,7 @@
       .then(lines => {
         lines.forEach(line => {
           const coords = line.stations.map(s => [s.lat, s.lng]);
-          L.polyline(coords, { color: line.color, weight: 4, opacity: 0.75 }).addTo(mrtLineLayer);
+          L.polyline(coords, { color: line.color, weight: 4, opacity: 0.75, pane: 'mrtLinePane' }).addTo(mrtLineLayer);
         });
       });
 
@@ -261,8 +265,9 @@
         const name   = s.name_zh + (s.name_en ? ` ${s.name_en}` : '');
         _reg[nodeId] = { id: nodeId, name, type: 'mrt' };
         L.circleMarker([s.lat, s.lng], {
-          radius: 7, color: '#ffffff', weight: 1.5,
+          radius: 4, color: '#ffffff', weight: 1.5,
           fillColor: firstColor(s.line_colors), fillOpacity: 0.92,
+          pane: 'mrtStationPane',
         })
         .bindPopup(`<b>${s.name_zh}</b>${s.name_en ? '<br>' + s.name_en : ''}` +
           (s.line_ids ? `<br><small style="color:#888">${s.line_ids.replace(/,/g, ' · ')}</small>` : '') +
@@ -278,7 +283,8 @@
         _reg[nodeId] = { id: nodeId, name, type: 'bike' };
         L.circleMarker([s.lat, s.lng], {
           radius: 4, color: '#ffffff', weight: 1,
-          fillColor: '#22cc66', fillOpacity: 0.85,
+          fillColor: '#ffcc00', fillOpacity: 0.5,
+          pane: 'bikePane',
         })
         .bindPopup(`<b>${name}</b>` +
           (s.name_en ? `<br><small>${s.name_en}</small>` : '') +
@@ -302,7 +308,7 @@
 
     // ── Route panel ───────────────────────────────────────────────────────────
 
-    const SEG_WEIGHTS = { mrt: 5, bike: 3, walk: 2 };
+    const SEG_WEIGHTS = { mrt: 9, bike: 7, walk: 5 };
     const MODE_LABELS = { mrt: 'MRT', bike: 'YouBike', walk: 'Walk' };
     const MODE_ICONS  = { mrt: '🚇', bike: '🚲', walk: '🚶' };
 
