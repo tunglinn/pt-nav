@@ -35,7 +35,12 @@ def mrt_lines():
     for r in rows:
         lid = r["line_id"]
         if lid not in lines:
-            lines[lid] = {"line_id": lid, "color": r["color_hex"] or "#888888", "stations": []}
+            lines[lid] = {
+                "line_id": lid,
+                "color": r["color_hex"] or "#888888",
+                "branch_from": r["branch_from_station_id"],
+                "stations": [],
+            }
         lines[lid]["stations"].append({"lat": r["lat"], "lng": r["lng"]})
     return list(lines.values())
 

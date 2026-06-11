@@ -5,10 +5,11 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "data", "pt_nav.db")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS mrt_lines (
-    line_id   TEXT PRIMARY KEY,
-    name_zh   TEXT NOT NULL,
-    name_en   TEXT,
-    color_hex TEXT
+    line_id                TEXT PRIMARY KEY,
+    name_zh                TEXT NOT NULL,
+    name_en                TEXT,
+    color_hex              TEXT,
+    branch_from_station_id TEXT REFERENCES mrt_stations(station_id)
 );
 
 CREATE TABLE IF NOT EXISTS mrt_stations (
@@ -94,7 +95,7 @@ def get_lines_with_stations() -> list[dict]:
         rows = con.execute("""
             SELECT ls.line_id, ls.station_id, ls.sequence,
                    s.name_zh, s.name_en, s.lat, s.lng,
-                   l.color_hex
+                   l.color_hex, l.branch_from_station_id
             FROM mrt_line_stations ls
             JOIN mrt_stations s USING (station_id)
             JOIN mrt_lines l ON l.line_id = ls.line_id

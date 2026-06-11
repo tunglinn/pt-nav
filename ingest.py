@@ -183,6 +183,47 @@ def ingest_youbike() -> int:
     return len(rows)
 
 
+# ── Branch line corrections ───────────────────────────────────────────────────
+# TDX appends branch terminals at the end of the parent line's sequence, which
+# creates a false long segment (e.g. Songshan → Xiaobitan on the green line).
+# We move each branch terminal into its own mini-line with branch_from_station_id
+# pointing at the true junction station.
+
+_BRANCHES = [
+    # (branch_line_id, name_zh, name_en, color_hex, parent_line_id, junction_id, terminal_ids...)
+    ("G_BR", "小碧潭支線", "Xiaobitan Branch", "#80C342", "G", "G03",  ["G03A"]),
+    ("R_BR", "新北投支線", "Xinbeitou Branch", "#F0A0B4", "R", "R28",  ["R28A"]),
+    ("O_LZ", "蘆洲支線",   "Luzhou Branch",    "#F8A227", "O", "O12",  ["O50", "O51", "O52", "O53", "O54"]),
+]
+
+
+def fix_branches() -> None:
+    with db._conn() as con:
+        for line_id, name_zh, name_en, color, parent, junction, terminals in _BRANCHES:
+            con.execute(
+                "INSERT INTO mrt_lines (line_id, name_zh, name_en, color_hex, branch_from_station_id) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(line_id) DO UPDATE SET color_hex=excluded.color_hex, "
+                "branch_from_station_id=excluded.branch_from_station_id",
+                (line_id, name_zh, name_en, color, junction),
+            )
+            for terminal in terminals:
+                con.execute(
+                    "DELETE FROM mrt_line_stations WHERE line_id=? AND station_id=?",
+                    (parent, terminal),
+                )
+            con.execute(
+                "INSERT OR IGNORE INTO mrt_line_stations (line_id, station_id, sequence) VALUES (?,?,1)",
+                (line_id, junction),
+            )
+            for seq, terminal in enumerate(terminals, start=2):
+                con.execute(
+                    "INSERT OR IGNORE INTO mrt_line_stations (line_id, station_id, sequence) VALUES (?,?,?)",
+                    (line_id, terminal, seq),
+                )
+    print(f"  fixed {len(_BRANCHES)} branch lines")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -206,6 +247,9 @@ def main() -> None:
 
     print("Ingesting YouBike stations...")
     n_youbike = ingest_youbike()
+
+    print("Fixing branch lines...")
+    fix_branches()
 
     print()
     print(f"Done: {n_lines} MRT lines, {n_stations} MRT stations, {n_links} line-station links, {n_youbike} YouBike stations")
